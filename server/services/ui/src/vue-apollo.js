@@ -33,7 +33,10 @@ export const defaultOptions = {
   // Use websockets for everything (no HTTP)
   // You need to pass a `wsEndpoint` for this to work
   websocketsOnly: false,
-  ssr: false
+  ssr: false,
+  httpLinkOptions: {
+    credentials: 'include'
+  }
 }
 
 // Create apollo client

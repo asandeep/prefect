@@ -9,7 +9,10 @@ import {
   wrapSchema
 } from '@graphql-tools/wrap'
 import { stitchSchemas } from '@graphql-tools/stitch'
+import passport from 'passport'
+import authenticationMiddleware from './auth'
 
+const PREFECT_UI_URL = process.env.PREFECT_UI_URL || 'http://localhost:8080'
 const APOLLO_API_PORT = process.env.APOLLO_API_PORT || '4200'
 const APOLLO_API_BIND_ADDRESS = process.env.APOLLO_API_BIND_ADDRESS || '0.0.0.0'
 
@@ -29,11 +32,53 @@ const TELEMETRY_ENABLED =
   PREFECT_SERVER__TELEMETRY__ENABLED == 'true' ? true : false
 const TELEMETRY_ID = uuidv4()
 
+// One day in milliseconds
+const SESSION_COOKIE_MAX_AGE = 24 * 60 * 60 * 1000
+const SESSION_KEY = process.env.SESSION_KEY
+
 // --------------------------------------------------------------------
 // Server
 const express = require('express')
 const depthLimit = require('graphql-depth-limit')
+const cookieSession = require('cookie-session')
+const cors = require('cors')
+
 const app = express()
+
+const corsOptions = {
+  origin: PREFECT_UI_URL,
+  credentials: true
+}
+
+app.options('/graphql/', cors(corsOptions))
+app.use(
+  cookieSession({
+    maxAge: SESSION_COOKIE_MAX_AGE,
+    keys: [SESSION_KEY]
+  })
+)
+app.use(passport.initialize())
+app.use(passport.session())
+app.use(authenticationMiddleware)
+
+// The first step in Google authentication that redirects user to google.com.
+// After authorization, Google redirects user back to this application at
+// /auth/google/callback
+app.get(
+  '/auth/google',
+  passport.authenticate('google', {
+    scope: ['https://www.googleapis.com/auth/userinfo.profile']
+  })
+)
+
+// Second step in Google auth process. User is redirected to homepage on
+// successful authentication.
+app.get('/auth/google/callback', passport.authenticate('google'), function(
+  req,
+  res
+) {
+  res.redirect('/')
+})
 
 class PrefectApolloServer extends ApolloServer {
   async createGraphQLServerOptions(req, res) {
@@ -89,7 +134,7 @@ async function buildSchema() {
     executor: hasuraExecutor,
     transforms: [
       // remove all hasura mutations
-      new FilterRootFields((operation) => !(operation === 'Mutation'))
+      new FilterRootFields(operation => !(operation === 'Mutation'))
     ]
   })
 
@@ -149,11 +194,11 @@ async function runServer() {
         }
       })
     },
-    formatError: (error) => {
+    formatError: error => {
       log(JSON.stringify(error))
       return error
     },
-    formatResponse: (response) => {
+    formatResponse: response => {
       return response
     },
     // this function is called whenever a request is made to the server in order to populate
@@ -175,7 +220,12 @@ async function runServer() {
 
   // without specifying a limit, we occasionally run into an implicit 100kb
   // limit set in bodyParser
-  server.applyMiddleware({ app, path: '/', bodyParserConfig: { limit: '1pb' } })
+  server.applyMiddleware({
+    app,
+    path: '/',
+    bodyParserConfig: { limit: '1pb' },
+    cors: corsOptions
+  })
   app.listen({
     host: APOLLO_API_BIND_ADDRESS,
     port: APOLLO_API_PORT,
@@ -187,7 +237,7 @@ async function runServer() {
 }
 
 function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 async function runServerForever() {
