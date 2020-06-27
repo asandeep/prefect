@@ -1,14 +1,8 @@
 import passport from 'passport'
 
-const APOLLO_API_PORT = process.env.APOLLO_API_PORT || '4200'
-// Ideally auth callback host should be same as address where apollo is running.
-// However, when running apollo as part of docker-compose, the application is
-// bound to listen at `0.0.0.0`, which is not a valid host for auth callback. In
-// that case, the host should be set to `localhost` to make it work.
-const APOLLO_AUTH_CALLBACK_HOST =
-  process.env.APOLLO_AUTH_CALLBACK_HOST ||
-  process.env.APOLLO_API_BIND_ADDRESS ||
-  '0.0.0.0'
+// Google OAuth callback url.
+const APOLLO_AUTH_CALLBACK_URL =
+  process.env.APOLLO_AUTH_CALLBACK_URL || 'http://localhost:4200'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
@@ -32,7 +26,7 @@ passport.use(
     {
       clientID: GOOGLE_CLIENT_ID,
       clientSecret: GOOGLE_CLIENT_SECRET,
-      callbackURL: `http://${APOLLO_AUTH_CALLBACK_HOST}:${APOLLO_API_PORT}/auth/google/callback`
+      callbackURL: `${APOLLO_AUTH_CALLBACK_URL}/auth/google/callback`
     },
     function(accessToken, refreshToken, profile, done) {
       return done(null, profile)
